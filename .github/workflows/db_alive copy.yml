@@ -30,7 +30,7 @@ jobs:
           python -c "
           import os
           import psycopg2
-          from urllib.parse import urlparse
+          from urllib.parse import unquote
 
           db_uri = os.getenv('DATABASE_URI')
           if not db_uri:
@@ -38,16 +38,28 @@ jobs:
               exit(1)
 
           try:
-              # Safely parse the URI components (handles special characters automatically)
-              result_url = urlparse(db_uri)
+              # Clean off the protocol scheme
+              clean_uri = db_uri.replace('postgresql://', '').replace('postgres://', '')
+              
+              # Split user:pass from host:port/dbname safely from the right
+              user_pass, rest = clean_uri.rsplit('@', 1)
+              user, password = user_pass.split(':', 1)
+              
+              # Decode the password back to its original characters
+              password = unquote(password)
+              
+              # Split host:port from dbname
+              host_port, dbname = rest.rsplit('/', 1)
+              host, port = host_port.split(':', 1)
               
               conn = psycopg2.connect(
-                  dbname=result_url.path[1:],
-                  user=result_url.username,
-                  password=result_url.password,
-                  host=result_url.hostname,
-                  port=result_url.port
+                  dbname=dbname,
+                  user=user,
+                  password=password,
+                  host=host,
+                  port=int(port)
               )
+              
               cursor = conn.cursor()
               cursor.execute('SELECT 1;')
               result = cursor.fetchone()
